@@ -1,0 +1,10 @@
+[project]
+name = "real-feel-models"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "dataclasses>=0.8",
+    "torch>=2.10.0",
+]
