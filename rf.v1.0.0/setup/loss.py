@@ -1,15 +1,13 @@
 """
 rf.v1.0.0.loss
-This is the third step of the training pipeline
-
-Notes:
+This is the 3rd step of the training pipeline
 
 """
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional
+from typing import Optional, Tuple
 
 class AdvancedLossFunction(nn.Module):
     def __init__(self, num_classes: int = 2, class_weights: Optional[torch.Tensor] = None,
@@ -102,3 +100,78 @@ class AdvancedLossFunction(nn.Module):
 
         else:
             raise ValueError(f"Unknown loss type: {self.loss_type}")
+
+class EnsembleLoss(nn.Module):
+    """
+    Specialized loss function for ensemble training
+    Balances individual model performance with ensemble coherence
+    """
+
+    def __init__(self, loss_config: dict, alpha: float = 0.7):
+        """
+        Args:
+            loss_config: Configuration for base loss function
+            alpha: Weight for primary vs ensemble loss (0.0 = only ensemble, 1.0 = only individual)
+        """
+        super().__init__()
+        self.alpha = alpha
+
+        # Individual model losses
+        self.primary_loss = AdvancedLossFunction(**loss_config)
+        self.backup_loss = AdvancedLossFunction(**loss_config)
+
+        # Ensemble loss
+        self.ensemble_loss = AdvancedLossFunction(**loss_config)
+
+    def forward(self, outputs: dict, labels: torch.Tensor) -> Tuple[torch.Tensor, dict]:
+        """
+        Compute ensemble loss
+
+        Args:
+            outputs: Dict with 'ensemble', 'primary', 'backup' logits
+            labels: Ground truth labels
+
+        Returns:
+            total_loss: Combined loss
+            loss_components: Dict with individual loss components
+        """
+        # Individual model losses
+        primary_loss = self.primary_loss(outputs['primary'], labels)
+        backup_loss = self.backup_loss(outputs['backup'], labels)
+        ensemble_loss = self.ensemble_loss(outputs['ensemble'], labels)
+
+        # Combine losses
+        individual_loss = (primary_loss + backup_loss) / 2
+        total_loss = self.alpha * individual_loss + (1 - self.alpha) * ensemble_loss
+
+        loss_components = {
+            'total': total_loss,
+            'ensemble': ensemble_loss,
+            'primary': primary_loss,
+            'backup': backup_loss,
+            'individual': individual_loss
+        }
+
+        return total_loss, loss_components
+
+
+def create_loss_function(loss_type: str = 'weighted_ce', num_classes: int = 2,
+                        class_weights: Optional[torch.Tensor] = None, **kwargs) -> AdvancedLossFunction:
+    """
+    Factory function to create loss function based on experiment 4 findings
+
+    Args:
+        loss_type: Type of loss ('weighted_ce', 'focal', 'label_smoothed')
+        num_classes: Number of output classes
+        class_weights: Optional pre-computed class weights
+        **kwargs: Additional loss-specific parameters
+
+    Returns:
+        Configured loss function
+    """
+    return AdvancedLossFunction(
+        num_classes=num_classes,
+        class_weights=class_weights,
+        loss_type=loss_type,
+        **kwargs
+    )

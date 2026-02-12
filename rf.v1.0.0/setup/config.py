@@ -1,11 +1,8 @@
 """
 rf.v1.0.0.config
-This is the first step of the training pipeline
-
-Notes:
+This is the 1st step of the training pipeline
 
 """
-
 
 import torch
 from dataclasses import dataclass
@@ -22,7 +19,6 @@ class ModelConfig:
     vocab_size: int = 50265  # RoBERTa vocab size
     num_classes: int = 2 # human or bot
 
-""""""
 @dataclass
 class TrainingConfig:
     # adam = Adaptive Moment Estimation

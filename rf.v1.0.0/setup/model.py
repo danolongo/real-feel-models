@@ -1,8 +1,6 @@
 """
 rf.v1.0.0.model
-This is the second step of the training pipeline
-
-Notes:
+This is the 2nd step of the training pipeline
 
 """
 
@@ -10,7 +8,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-from collections.abc import Sequence
 from typing import Optional, Dict, Union
 from .config import ModelConfig, EnsembleConfig
 
