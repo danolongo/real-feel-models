@@ -1,5 +1,5 @@
 """
-rf.v1.0.0.config
+rf.v1.0.0.setup.config
 This is the 1st step of the training pipeline
 
 """

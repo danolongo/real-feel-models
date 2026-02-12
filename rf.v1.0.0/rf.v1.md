@@ -8,7 +8,7 @@ will use DO's GPU droplets to train and run inference
 # Architecture Set-up
 
 1. ## *config.py*: 
-    Has all model details such as dimension size, heads, vocab size, etc
+    Dataclasses
     
     - `ModelConfig`: what it has and its role...
     - `TrainingConfig`
