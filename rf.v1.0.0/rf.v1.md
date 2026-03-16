@@ -1,16 +1,13 @@
-DO tickets: https://cloudsupport.digitalocean.com/s/?teamId=001QP000013YbcxYAC
-create new team (after limit is increased): https://cloud.digitalocean.com/account/team/create?i=c31241
-
-will use DO's GPU droplets to train and run inference
+DO's GPU droplets to train and run inference
 
 # COMPLETE FLOW
 
 # Architecture Set-up
 
 1. ## *config.py*: 
-    Dataclasses
+    the model's settings
     
-    - `ModelConfig`: what it has and its role...
+    - `ModelConfig`
     - `TrainingConfig`
     - `DataConfig`
     - `EnsembleConfig`
@@ -18,7 +15,7 @@ will use DO's GPU droplets to train and run inference
     - `get_default_config()`
 
 2. ## *model.py*
-    Brief description of what this block does
+    forward passes – the stuff that makes the model actually work in training
     - `MultiHeadAttention`
     - `TransformerEncoderLayer`
     - `AdvancedPoolingHead`
@@ -27,6 +24,7 @@ will use DO's GPU droplets to train and run inference
     - `create_ensemble_model()`
 
 3. ## *loss.py*
+    loss funcs for the different algos used
     - `AdvancedLossFunction`
     - `EnsembleLoss`
     - `create_loss_function()`

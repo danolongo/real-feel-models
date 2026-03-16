@@ -46,7 +46,7 @@ class TrainingConfig:
 
     # loss function
     use_class_weights: bool = True
-    loss_type: str = "weighted_ce" # weighted cross entropy...?
+    loss_type: str = "weighted_ce" # weighted cross entropy
     # alpha assigns different weights to different classes, balancing the loss function
     focal_alpha: float = 0.25
     # controls the rate at which well-classified (easy) examples are down-weighted
