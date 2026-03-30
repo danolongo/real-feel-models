@@ -71,7 +71,7 @@ class EnsembleTrainer:
         self.training_start_time = None
 
         # AMP scaler — only active on CUDA
-        self.scaler = torch.cuda.amp.GradScaler() if self.device.type == 'cuda' else None
+        self.scaler = torch.amp.GradScaler('cuda') if self.device.type == 'cuda' else None
 
     def setup_loss_function(self):
         """Setup loss function based on configuration"""

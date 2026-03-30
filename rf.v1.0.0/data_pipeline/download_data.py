@@ -12,6 +12,7 @@ Output: datasets/cresci_2017_merged.csv with columns 'text' and 'label'
   - label=1: bot (all bot categories)
 """
 
+import html
 import logging
 import re
 import sys
@@ -54,12 +55,26 @@ _URL_RE = re.compile(
     r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
 )
 _MENTION_RE = re.compile(r"@\w+")
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
 def preprocess_text(text: str) -> str:
     if not text or str(text).strip() in ("nan", "None", ""):
         return "[EMPTY]"
     text = str(text).strip()
+
+    # Drop rows that are HTML source strings (tweet client field leaked into text column)
+    # e.g. <a href="..." rel="nofollow">Twitter Web Client</a>
+    stripped = _HTML_TAG_RE.sub("", text).strip()
+    if not stripped:
+        return "[EMPTY]"
+    # If the original text was >50% HTML tags, it's a source field — discard it
+    if len(stripped) < len(text) * 0.5:
+        return "[EMPTY]"
+
+    text = stripped
+    # Unescape HTML entities (e.g. &amp; &lt; &#39;)
+    text = html.unescape(text)
     text = _URL_RE.sub("http://url.removed", text)
     text = _MENTION_RE.sub("@user", text)
     text = " ".join(text.split())

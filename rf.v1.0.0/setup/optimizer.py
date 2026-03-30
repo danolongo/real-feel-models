@@ -340,7 +340,10 @@ class OptimizationManager:
 
         self.optimization_history['learning_rates'].append(current_lr)
         self.optimization_history['gradient_norms'].append(grad_stats['original_norm'])
-        self.optimization_history['gradient_clips'].append(grad_stats['was_clipped'])
+        was_clipped = grad_stats['was_clipped']
+        if hasattr(was_clipped, 'item'):
+            was_clipped = was_clipped.item()
+        self.optimization_history['gradient_clips'].append(was_clipped)
         self.optimization_history['parameter_norms'].append(param_norm)
 
         return {
