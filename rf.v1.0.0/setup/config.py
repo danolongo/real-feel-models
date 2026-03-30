@@ -124,7 +124,7 @@ def get_production_config() -> ExperimentConfig:
         model = ModelConfig(),
         training = TrainingConfig(
             max_epochs=20,
-            batch_size=64,
+            batch_size=256,
             warmup_steps=2000,
         ),
         data = DataConfig(num_workers=8),
