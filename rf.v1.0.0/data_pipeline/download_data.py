@@ -272,7 +272,7 @@ def main():
     )
     args = parser.parse_args()
 
-    if DIRECT_DOWNLOAD_URL == "DIRECT_DOWNLOAD_URL":
+    if not DIRECT_DOWNLOAD_URL or DIRECT_DOWNLOAD_URL == "PASTE_YOUR_LINK_HERE":
         log.error(
             "No download URL set. Open download_data.py and replace "
             "DIRECT_DOWNLOAD_URL with your direct link."
