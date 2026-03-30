@@ -37,7 +37,7 @@ uv run python -c "import torch; print('CUDA available:', torch.cuda.is_available
 
 echo ""
 echo "Setup complete. Start training with:"
-echo "  nohup uv run python train.py \\"
+echo "  nohup uv run python3 train.py \\"
 echo "    --config production \\"
 echo "    --data_path rf.v1.0.0/datasets/cresci_2017_merged.csv \\"
 echo "    --output_dir ./trained_models \\"
