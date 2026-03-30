@@ -118,20 +118,23 @@ def download_zip(url: str, raw_dir: Path) -> bool:
         log.error(f"Bad zip file: {exc}")
         return False
 
-    # Extract nested *.csv.zip files (e.g. genuine_accounts.csv.zip → genuine_accounts.csv/)
-    nested_zips = list(raw_dir.rglob("*.csv.zip"))
-    if nested_zips:
-        log.info(f"Found {len(nested_zips)} nested zip(s) — extracting...")
-        for nested in nested_zips:
-            try:
-                with zipfile.ZipFile(nested) as zf:
-                    zf.extractall(nested.parent)
-                log.info(f"  Extracted: {nested.name}")
-                nested.unlink()  # remove the inner zip to save space
-            except zipfile.BadZipFile as exc:
-                log.warning(f"  Could not extract {nested.name}: {exc}")
-
     return True
+
+
+def extract_nested_zips(raw_dir: Path) -> None:
+    """Extract any *.csv.zip files found under raw_dir (in place)."""
+    nested_zips = list(raw_dir.rglob("*.csv.zip"))
+    if not nested_zips:
+        return
+    log.info(f"Found {len(nested_zips)} nested zip(s) — extracting...")
+    for nested in nested_zips:
+        try:
+            with zipfile.ZipFile(nested) as zf:
+                zf.extractall(nested.parent)
+            log.info(f"  Extracted: {nested.name}")
+            nested.unlink()
+        except zipfile.BadZipFile as exc:
+            log.warning(f"  Could not extract {nested.name}: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +290,8 @@ def main():
         log.info(f"Raw data already extracted at {raw_dir} — skipping download.")
     elif not download_zip(DIRECT_DOWNLOAD_URL, raw_dir):
         sys.exit(1)
+
+    extract_nested_zips(raw_dir)
 
     result = load_cresci_from_dir(raw_dir)
     if result is None:
