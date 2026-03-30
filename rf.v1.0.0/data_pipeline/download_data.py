@@ -329,18 +329,26 @@ def load_cresci_from_dir(root: Path) -> Optional[Tuple[List[str], List[int]]]:
             log.warning(f"  No tweets.csv in {folder_path}, skipping.")
             continue
 
+        # Cresci-2017 tweets.csv has no header; tweet text is column index 2.
+        # Files use Latin-1 encoding (legacy Twitter export, ~2010-2013).
         try:
-            df = pd.read_csv(tweets_csv, low_memory=False)
+            df = pd.read_csv(
+                tweets_csv,
+                header=None,
+                encoding="latin-1",
+                low_memory=False,
+                on_bad_lines="skip",
+            )
         except Exception as exc:
             log.warning(f"  Could not read {tweets_csv}: {exc}")
             continue
 
-        if "text" not in df.columns:
-            log.warning(f"  No 'text' column in {tweets_csv}. Columns: {list(df.columns)}")
+        if df.shape[1] < 3:
+            log.warning(f"  Unexpected column count ({df.shape[1]}) in {tweets_csv}, skipping.")
             continue
 
         before = len(all_texts)
-        for raw_text in df["text"].dropna():
+        for raw_text in df.iloc[:, 2].dropna():
             text = preprocess_text(str(raw_text))
             # Skip very short or pure retweet headers
             if len(text) < 10:
