@@ -248,7 +248,7 @@ def main():
     )
     args = parser.parse_args()
 
-    if DIRECT_DOWNLOAD_URL == "https://botometer.osome.iu.edu/bot-repository/datasets/cresci-2017/cresci-2017.csv.zip":
+    if DIRECT_DOWNLOAD_URL == "DIRECT_DOWNLOAD_URL":
         log.error(
             "No download URL set. Open download_data.py and replace "
             "DIRECT_DOWNLOAD_URL with your direct link."
