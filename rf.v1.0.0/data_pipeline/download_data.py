@@ -113,10 +113,23 @@ def download_zip(url: str, raw_dir: Path) -> bool:
     try:
         with zipfile.ZipFile(BytesIO(raw_zip)) as zf:
             zf.extractall(raw_dir)
-        log.info("Extraction complete.")
+        log.info("Outer zip extracted.")
     except zipfile.BadZipFile as exc:
         log.error(f"Bad zip file: {exc}")
         return False
+
+    # Extract nested *.csv.zip files (e.g. genuine_accounts.csv.zip → genuine_accounts.csv/)
+    nested_zips = list(raw_dir.rglob("*.csv.zip"))
+    if nested_zips:
+        log.info(f"Found {len(nested_zips)} nested zip(s) — extracting...")
+        for nested in nested_zips:
+            try:
+                with zipfile.ZipFile(nested) as zf:
+                    zf.extractall(nested.parent)
+                log.info(f"  Extracted: {nested.name}")
+                nested.unlink()  # remove the inner zip to save space
+            except zipfile.BadZipFile as exc:
+                log.warning(f"  Could not extract {nested.name}: {exc}")
 
     return True
 
