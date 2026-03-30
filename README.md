@@ -31,7 +31,7 @@ uv run python rf.v1.0.0/data_pipeline/download_data.py
 ## Train
 
 ```bash
-python train.py \
+python3 train.py \
   --config production \
   --data_path rf.v1.0.0/datasets/cresci_2017_merged.csv \
   --output_dir ./trained_models
