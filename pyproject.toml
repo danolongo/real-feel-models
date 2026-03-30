@@ -8,10 +8,20 @@ dependencies = [
     "dataclasses>=0.8",
     "datasets>=3.0.0",
     "huggingface-hub>=0.24.0",
+    "matplotlib>=3.8",
     "numpy>=2.2.6",
     "pandas>=2.3.3",
     "requests>=2.32.0",
+    "scikit-learn>=1.4",
     "seaborn>=0.13.2",
     "torch>=2.10.0",
+    "tqdm>=4.66",
     "transformers>=5.1.0",
 ]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["rf.v1.0.0/testing"]
+addopts = "-v --tb=short"
