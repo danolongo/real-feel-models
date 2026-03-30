@@ -70,6 +70,9 @@ class EnsembleTrainer:
         self.best_val_f1 = 0.0
         self.training_start_time = None
 
+        # AMP scaler — only active on CUDA
+        self.scaler = torch.cuda.amp.GradScaler() if self.device.type == 'cuda' else None
+
     def setup_loss_function(self):
         """Setup loss function based on configuration"""
         # Base loss configuration
@@ -112,14 +115,13 @@ class EnsembleTrainer:
             attention_mask = batch['attention_mask'].to(self.device)
             labels = batch['labels'].to(self.device)
 
-            # Forward pass (get individual predictions)
-            outputs = self.model(input_ids, attention_mask, return_individual=True)
+            # Forward pass with AMP autocast when on GPU
+            with torch.autocast(device_type=self.device.type, enabled=self.scaler is not None):
+                outputs = self.model(input_ids, attention_mask, return_individual=True)
+                loss, batch_loss_components = self.criterion(outputs, labels)
 
-            # Compute loss
-            loss, batch_loss_components = self.criterion(outputs, labels)
-
-            # Optimization step
-            opt_stats = self.optimization_manager.optimization_step(loss)
+            # Optimization step (passes scaler for AMP-aware backward/step)
+            opt_stats = self.optimization_manager.optimization_step(loss, scaler=self.scaler)
 
             # Track metrics
             total_loss += loss.item()
@@ -239,6 +241,10 @@ class EnsembleTrainer:
             print(f"  Learning Rate:     {opt_stats['learning_rate']['current']:.2e}")
         if 'clip_rate' in opt_stats:
             print(f"  Gradient Clip Rate: {opt_stats['clip_rate']:.3f}")
+
+    def save_model(self, path: str):
+        """Save model state dict to path"""
+        torch.save(self.model.state_dict(), path)
 
     def save_best_model(self, val_f1: float):
         """Save model if it's the best so far"""

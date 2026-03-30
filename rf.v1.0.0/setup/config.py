@@ -27,14 +27,14 @@ class TrainingConfig:
     learning_rate: float = 2e-4
     weight_decay: float = 0.01 # regularizer to prevent overfitting
     adam_betas: tuple = (0.9, 0.999) # 1st moment and 2nd moment estimate, "momentum decay rate"
-    adam_epsilon: float = 1e-8 # to prevent division by zero
+    adam_eps: float = 1e-8 # to prevent division by zero
 
     # learning rate scheduling
     scheduler_type: str = "cosine"
     warmup_steps: int = 1000
 
     # gradient clipping. handles 'exploding' gradients
-    gradient_clippling: bool = True
+    gradient_clipping: bool = True
     clip_type: str = "norm"
     clip_value: float = 1.0
 
@@ -56,12 +56,12 @@ class TrainingConfig:
 @dataclass
 class DataConfig:
     test_size: float = 0.2
-    validation_size: float = 0.1
-    seed: int = 42
+    val_size: float = 0.1
+    random_state: int = 42
     max_length: int = 128
     vocab_size: int = 50265
     num_workers: int = 4
-    pin_mem: bool = True
+    pin_memory: bool = True
 
 @dataclass
 class EnsembleConfig:
@@ -69,8 +69,8 @@ class EnsembleConfig:
     primary_pool: str = 'cls'
     primary_weight: float = 0.7
 
-    secondary_pool: str = 'max'
-    secondary_weight: float = 0.3
+    backup_pool: str = 'max'
+    backup_weight: float = 0.3
 
     combination_method: str = 'weighted_average'
     confidence_threshold: float = 0.8 # when to only trust primary
@@ -95,5 +95,38 @@ def get_default_config() -> ExperimentConfig:
         model = ModelConfig(),
         training = TrainingConfig(),
         data = DataConfig(),
+        ensemble = EnsembleConfig()
+    )
+
+def get_fast_config() -> ExperimentConfig:
+    """Smaller config for quick testing"""
+    return ExperimentConfig(
+        model = ModelConfig(
+            d_model=128,
+            num_layers=2,
+            num_heads=4,
+            d_ff=512,
+            dropout=0.1,
+            max_seq_length=64,
+        ),
+        training = TrainingConfig(
+            max_epochs=2,
+            batch_size=16,
+            warmup_steps=100,
+        ),
+        data = DataConfig(),
+        ensemble = EnsembleConfig()
+    )
+
+def get_production_config() -> ExperimentConfig:
+    """Full-scale production config"""
+    return ExperimentConfig(
+        model = ModelConfig(),
+        training = TrainingConfig(
+            max_epochs=20,
+            batch_size=64,
+            warmup_steps=2000,
+        ),
+        data = DataConfig(num_workers=8),
         ensemble = EnsembleConfig()
     )

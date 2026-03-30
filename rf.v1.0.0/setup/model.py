@@ -13,38 +13,38 @@ from .config import ModelConfig, EnsembleConfig
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, dim_size: int, num_heads: int, dropout_rate: float):
-        super().__init__
+        super().__init__()
         assert dim_size % num_heads == 0, "dimension size must be divisible by number of heads"
 
         self.dim_size = dim_size
         self.num_heads = num_heads
         self.head_dim = dim_size // num_heads
 
-        self.qvk_proj = nn.Linear(dim_size, 3 * dim_size)
+        self.qkv_proj = nn.Linear(dim_size, 3 * dim_size)
         self.output_proj = nn.Linear(dim_size, dim_size)
-        self.droput = nn.Dropout(dropout_rate)
-    
+        self.dropout = nn.Dropout(dropout_rate)
+
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, sequence_len, dim_size = x.size()
 
-        # project to query key and val
-        qkv = self.qvk_projection(x)
+        # project to query, key, and val
+        qkv = self.qkv_proj(x)
         qkv = qkv.reshape(batch_size, sequence_len, self.num_heads, 3 * self.head_dim)
         qkv = qkv.permute(0, 2, 1, 3)
 
         q, k, v = qkv.chunk(3, dim=-1)
 
         # scaled dot product attention
-        scores = torch.mm(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
+        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
 
         if mask is not None:
             scores = scores.masked_fill(mask == 0, -1e9)
-        
-        attention_weights = F.softmax(scores, dim=-1)
-        attention_weights = self.droput(attention_weights)
 
-        attended_values = torch.mm(attention_weights, v)
-        attended_values = attended_values.permute(0, 1, 2, 3).contiguous()
+        attention_weights = F.softmax(scores, dim=-1)
+        attention_weights = self.dropout(attention_weights)
+
+        attended_values = torch.matmul(attention_weights, v)
+        attended_values = attended_values.permute(0, 2, 1, 3).contiguous()
         attended_values = attended_values.reshape(batch_size, sequence_len, dim_size)
 
         output = self.output_proj(attended_values)
@@ -63,16 +63,16 @@ class TransformerEncoderLayer(nn.Module):
         )
         self.norm1 = nn.LayerNorm(dimension_size)
         self.norm2 = nn.LayerNorm(dimension_size)
-        self.dropout_rate = nn.Dropout(dropout_rate)
+        self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         # pre-norm self attention
         attention_output = self.self_attention(self.norm1(x), mask)
-        x = x + self.dropout_rate(attention_output)
+        x = x + self.dropout(attention_output)
 
         # pre-norm feed forward
         feed_forward_output = self.feed_forward(self.norm2(x))
-        x = x + self.dropout_rate(feed_forward_output)
+        x = x + self.dropout(feed_forward_output)
 
         return x
 
@@ -108,7 +108,7 @@ class AdvancedPoolingHead(nn.Module):
                 masked_hidden[mask_expanded == 0] = -1e9
                 pooled = masked_hidden.max(dim=1)[0]
             else:
-                pooled = masked_hidden.max(dim=1)[0]
+                pooled = hidden_states.max(dim=1)[0]
 
         else:
             raise ValueError(f"Unknown pooling strategy: {self.pooling_strategy}")
@@ -137,25 +137,25 @@ class BotDetectionTransformer(nn.Module):
         self.pooling_strategy = pooling_strategy
 
         # embeddings
-        self.token_embedding = nn.Embedding(config.vocab_size, config.dimension_size)
-        self.position_embedding = nn.Embedding(config.max_sequence_len, config.dimension_size)
+        self.token_embedding = nn.Embedding(config.vocab_size, config.d_model)
+        self.position_embedding = nn.Embedding(config.max_seq_length, config.d_model)
 
         # transformer encoder layers
         self.encoder_layers = nn.ModuleList([
             TransformerEncoderLayer(
-                config.dimension_size,
-                config.heads,
-                config.feedforward_dimensions,
-                config.dropout_rate
-            ) for _ in range(config.layers)
+                config.d_model,
+                config.num_heads,
+                config.d_ff,
+                config.dropout
+            ) for _ in range(config.num_layers)
         ])
 
         # pooling head
         self.pooling_head = AdvancedPoolingHead(
-            config.dimension_size,
+            config.d_model,
             config.num_classes,
             pooling_strategy,
-            config.dropout_rate
+            config.dropout
         )
 
         # init weights
@@ -165,8 +165,8 @@ class BotDetectionTransformer(nn.Module):
         """init weights following BERT-style init"""
         if isinstance(module, nn.Linear):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
-        if module.bias is not None:
-            nn.init.zeros_(module.bias)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
         elif isinstance(module, nn.LayerNorm):
@@ -182,17 +182,14 @@ class BotDetectionTransformer(nn.Module):
         # create position ids
         position_ids = torch.arange(sequence_length, device=device).unsqueeze(0).expand(batch_size, -1)
 
-        # embeddings
-        token_embeddings = self.token_embedding(input_ids)
+        # embeddings: scale token embeddings first, then add position embeddings
+        token_embeddings = self.token_embedding(input_ids) * math.sqrt(self.config.d_model)
         position_embeddings = self.position_embedding(position_ids)
         embeddings = token_embeddings + position_embeddings
 
-        # scale embeddings (from BERT)
-        embeddings = embeddings * math.sqrt(self.config.dimension_size)
-
         # create attention mask for transformer
         if attention_mask is not None:
-        # convert to 4D mask for multi-head attention
+            # convert to 4D mask for multi-head attention
             extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
             extended_attention_mask = extended_attention_mask.to(dtype=embeddings.dtype)
             extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
@@ -210,15 +207,15 @@ class BotDetectionTransformer(nn.Module):
         return logits
 
 class CLSMaxPoolEnsemble(nn.Module):
-    """CLS + MaxPool emsemble for bot detection"""
+    """CLS + MaxPool ensemble for bot detection"""
 
     def __init__(self, model_config: ModelConfig, ensemble_config: EnsembleConfig):
-        super().__init()
+        super().__init__()
         self.model_config = model_config
         self.ensemble_config = ensemble_config
 
         # primary model ([CLS])
-        self.primary_model = BotDetectionTransformer(model_config, pooling_strategy='cls')
+        self.primary_model = BotDetectionTransformer(model_config, pooling_strategy='CLS')
         # backup model (maxpool)
         self.backup_model = BotDetectionTransformer(model_config, pooling_strategy='max')
 
@@ -231,13 +228,13 @@ class CLSMaxPoolEnsemble(nn.Module):
 
     def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None,
                 return_individual: bool = False) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
-        """forward pass thru ensamble"""
+        """forward pass through ensemble"""
 
         # predictions from both models
         primary_logits = self.primary_model(input_ids, attention_mask)
         backup_logits = self.backup_model(input_ids, attention_mask)
 
-        # combine predictions based on ensamble startegy
+        # combine predictions based on ensemble strategy
         if self.ensemble_config.combination_method == 'weighted_average':
             ensemble_logits = (
                 self.ensemble_config.primary_weight * primary_logits +

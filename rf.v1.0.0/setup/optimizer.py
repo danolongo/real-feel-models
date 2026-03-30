@@ -299,19 +299,24 @@ class OptimizationManager:
             clip_value=self.config.clip_value
         )
 
-    def optimization_step(self, loss: torch.Tensor) -> dict:
+    def optimization_step(self, loss: torch.Tensor, scaler=None) -> dict:
         """
         Perform complete optimization step: backward, clip, step, schedule
 
         Args:
             loss: Loss tensor to backpropagate
+            scaler: Optional torch.cuda.amp.GradScaler for mixed-precision training
 
         Returns:
             Dictionary with optimization statistics
         """
         # Backward pass
         self.optimizer.zero_grad()
-        loss.backward()
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.unscale_(self.optimizer)  # unscale before clipping
+        else:
+            loss.backward()
 
         # Gradient clipping
         grad_stats = {'original_norm': 0.0, 'was_clipped': False, 'clipped_norm': 0.0}
@@ -319,7 +324,11 @@ class OptimizationManager:
             grad_stats = self.gradient_clipper.clip_gradients(self.model)
 
         # Parameter update
-        self.optimizer.step()
+        if scaler is not None:
+            scaler.step(self.optimizer)
+            scaler.update()
+        else:
+            self.optimizer.step()
 
         # Learning rate update
         if self.scheduler:

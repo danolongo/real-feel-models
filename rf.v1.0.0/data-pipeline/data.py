@@ -332,7 +332,7 @@ def create_data_loaders(data_config: DataConfig, model_name: str = "cardiffnlp/t
     val_ratio = data_config.val_size / (data_config.test_size + data_config.val_size)
     val_texts, test_texts, val_labels, test_labels = train_test_split(
         temp_texts, temp_labels,
-        test_size=(1 - val_ratio),
+        test_size=(1.0 - val_ratio),
         random_state=data_config.random_state,
         stratify=temp_labels
     )
@@ -367,7 +367,7 @@ def create_data_loaders(data_config: DataConfig, model_name: str = "cardiffnlp/t
         batch_size=32,
         shuffle=False,
         num_workers=data_config.num_workers,
-        pin_memory=data_config.pin_memory
+        pin_memory=data_config.pin_memory,
     )
 
     test_loader = DataLoader(
@@ -375,7 +375,7 @@ def create_data_loaders(data_config: DataConfig, model_name: str = "cardiffnlp/t
         batch_size=32,
         shuffle=False,
         num_workers=data_config.num_workers,
-        pin_memory=data_config.pin_memory
+        pin_memory=data_config.pin_memory,
     )
 
     logger.info("Data loaders created successfully")

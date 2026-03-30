@@ -53,7 +53,7 @@ class AdvancedLossFunction(nn.Module):
         """
 
         ce_loss = F.cross_entropy(logits, labels, reduction='none')
-        p_t = torch.exp(ce_loss)
+        p_t = torch.exp(-ce_loss)
 
         # alpha weighting
         if isinstance(self.focal_alpha, (list, tuple, torch.Tensor)):

@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from ..setup.config import get_default_config, get_fast_config, get_production_config
 from ..setup.model import create_ensemble_model
-from trainer import create_ensemble_trainer
+from .trainer import create_ensemble_trainer
 from torch.utils.data import Dataset, DataLoader, random_split
 
 # Set up logging
@@ -349,8 +349,8 @@ def save_training_results(config, metrics: Dict[str, Any], model_path: str, outp
                 'loss_type': config.training.loss_type
             },
             'ensemble_config': {
-                'primary_pooling': config.ensemble.primary_pooling,
-                'backup_pooling': config.ensemble.backup_pooling,
+                'primary_pool': config.ensemble.primary_pool,
+                'backup_pool': config.ensemble.backup_pool,
                 'combination_method': config.ensemble.combination_method,
                 'primary_weight': config.ensemble.primary_weight,
                 'backup_weight': config.ensemble.backup_weight
@@ -420,6 +420,7 @@ def main():
     torch.manual_seed(config.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(config.seed)
+        torch.backends.cudnn.benchmark = True  # faster convolution autotune for fixed input sizes
 
     logger.info("="*80)
     logger.info("CLS + MAXPOOL ENSEMBLE TRAINING")

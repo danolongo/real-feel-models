@@ -15,7 +15,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from ..setup.config import get_default_config, get_fast_config
 from ..setup.model import create_ensemble_model
-from ..training-pipeline.trainer import create_ensemble_trainer
+import importlib.util as _ilu
+_trainer_path = Path(__file__).parent.parent / 'training-pipeline' / 'trainer.py'
+_spec = _ilu.spec_from_file_location("trainer", _trainer_path)
+_trainer_mod = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(_trainer_mod)
+create_ensemble_trainer = _trainer_mod.create_ensemble_trainer
 
 
 class SyntheticBotDataset(Dataset):
