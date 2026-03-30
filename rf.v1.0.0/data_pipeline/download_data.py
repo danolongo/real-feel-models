@@ -1,32 +1,24 @@
 #!/usr/bin/env python3
 """
-rf.v1.0.0.data-pipeline.download_data
+rf.v1.0.0.data_pipeline.download_data
 Download and prepare the Cresci-2017 Twitter bot detection dataset.
-
-Strategy:
-  1. Try HuggingFace datasets hub (best UX, automatic caching)
-  2. Fall back to direct Zenodo download (official canonical source)
-
-Output: datasets/cresci_2017_merged.csv with columns 'text' and 'label'
-  - label=0: human (genuine accounts)
-  - label=1: bot (all bot categories)
 
 Usage:
   python download_data.py
   python download_data.py --output_dir /custom/path
-  python download_data.py --method hf        # HuggingFace only
-  python download_data.py --method zenodo    # Zenodo direct download only
+
+Output: datasets/cresci_2017_merged.csv with columns 'text' and 'label'
+  - label=0: human (genuine accounts)
+  - label=1: bot (all bot categories)
 """
 
-import argparse
 import logging
-import os
-import sys
 import re
+import sys
 import zipfile
 from io import BytesIO
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,26 +27,16 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+DIRECT_DOWNLOAD_URL = "https://botometer.osome.iu.edu/bot-repository/datasets/cresci-2017/cresci-2017.csv.zip"
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-# HuggingFace dataset identifiers to try (in priority order)
-HF_DATASET_CANDIDATES = [
-    # Cresci-2017 mirrors on the Hub
-    "twitterbot/cresci-2017",
-    "cresci-2017/cresci-2017",
-    "bot-detection/cresci-2017",
-]
-
-# Zenodo record for Cresci-2017 (DOI: 10.5281/zenodo.1482079)
-ZENODO_RECORD_ID = "1482079"
-ZENODO_API_URL = f"https://zenodo.org/api/records/{ZENODO_RECORD_ID}"
-
 # Folder → label mapping for the Cresci-2017 directory structure
 CRESCI_LABEL_MAP = {
-    "genuine_accounts.csv": 0,       # human
-    "fake_followers.csv": 1,         # bot
+    "genuine_accounts.csv": 0,
+    "fake_followers.csv": 1,
     "social_spambots_1.csv": 1,
     "social_spambots_2.csv": 1,
     "social_spambots_3.csv": 1,
@@ -65,7 +47,7 @@ CRESCI_LABEL_MAP = {
 }
 
 # ---------------------------------------------------------------------------
-# Text preprocessing (matches DatasetLoader.preprocess_text in data.py)
+# Text preprocessing
 # ---------------------------------------------------------------------------
 
 _URL_RE = re.compile(
@@ -85,226 +67,107 @@ def preprocess_text(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# HuggingFace download path
+# Download
 # ---------------------------------------------------------------------------
 
-def try_hf_download() -> Optional[Tuple[List[str], List[int]]]:
-    """
-    Attempt to load the Cresci-2017 dataset from HuggingFace Hub.
-    Returns (texts, labels) on success or None on failure.
-    """
-    try:
-        from datasets import load_dataset  # type: ignore
-    except ImportError:
-        log.warning("'datasets' library not installed — skipping HuggingFace path.")
-        return None
-
-    for dataset_id in HF_DATASET_CANDIDATES:
-        log.info(f"Trying HuggingFace dataset: {dataset_id}")
-        try:
-            ds = load_dataset(dataset_id)
-            return _extract_hf_texts_labels(ds)
-        except Exception as exc:
-            log.debug(f"  {dataset_id} failed: {exc}")
-
-    # Generic fallback: look for any split that has text+label columns
-    log.info("Named Cresci mirrors not found. Trying generic 'text'+'label' HF search...")
-    generic_candidates = [
-        "valurank/Twitter-Bots-Accounts",
-        "social-media-ai/twitter-bots",
-        "papluca/twitter-bot-detection",
-    ]
-    for dataset_id in generic_candidates:
-        log.info(f"Trying generic HF dataset: {dataset_id}")
-        try:
-            ds = load_dataset(dataset_id)
-            result = _extract_hf_texts_labels(ds)
-            if result:
-                log.info(f"  SUCCESS: {dataset_id} ({len(result[0])} samples)")
-                return result
-        except Exception as exc:
-            log.debug(f"  {dataset_id} failed: {exc}")
-
-    return None
-
-
-def _extract_hf_texts_labels(ds) -> Optional[Tuple[List[str], List[int]]]:
-    """
-    Given a HuggingFace DatasetDict, extract texts and labels.
-    Handles multiple column naming conventions.
-    """
-    try:
-        import pandas as pd
-    except ImportError:
-        import subprocess
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pandas"])
-        import pandas as pd
-
-    all_texts: List[str] = []
-    all_labels: List[int] = []
-
-    # Combine all available splits
-    for split_name, split_data in ds.items():
-        df = split_data.to_pandas()
-
-        # Identify text column
-        text_col = None
-        for candidate in ("text", "tweet", "content", "tweet_text"):
-            if candidate in df.columns:
-                text_col = candidate
-                break
-
-        # Identify label column
-        label_col = None
-        for candidate in ("label", "bot", "is_bot", "class", "account_type"):
-            if candidate in df.columns:
-                label_col = candidate
-                break
-
-        if text_col is None or label_col is None:
-            log.warning(
-                f"  Split '{split_name}' missing text/label columns "
-                f"(found: {list(df.columns)}). Skipping."
-            )
-            continue
-
-        for _, row in df.iterrows():
-            raw_text = row[text_col]
-            raw_label = row[label_col]
-
-            text = preprocess_text(raw_text)
-            if len(text) < 10:
-                continue
-
-            # Normalise label to 0/1
-            if isinstance(raw_label, (int, float)):
-                label = int(raw_label)
-            elif isinstance(raw_label, str):
-                low = raw_label.lower()
-                if low in ("human", "genuine", "0"):
-                    label = 0
-                elif low in ("bot", "fake", "spam", "1"):
-                    label = 1
-                else:
-                    log.debug(f"  Unknown label value '{raw_label}' — skipping row.")
-                    continue
-            else:
-                continue
-
-            all_texts.append(text)
-            all_labels.append(label)
-
-        log.info(f"  Split '{split_name}': {len(all_texts)} samples accumulated")
-
-    if not all_texts:
-        return None
-
-    return all_texts, all_labels
-
-
-# ---------------------------------------------------------------------------
-# Zenodo / direct download path
-# ---------------------------------------------------------------------------
-
-def try_zenodo_download(raw_dir: Path) -> Optional[Tuple[List[str], List[int]]]:
-    """
-    Download the Cresci-2017 zip from Zenodo and extract into raw_dir.
-    Returns (texts, labels) on success or None on failure.
-    """
+def download_zip(url: str, raw_dir: Path) -> bool:
+    """Stream-download a zip from url and extract into raw_dir."""
     try:
         import requests
     except ImportError:
-        log.warning("'requests' library not installed — skipping Zenodo path.")
-        return None
+        log.error("'requests' library not installed. Run: uv sync")
+        return False
 
-    log.info(f"Fetching Zenodo record metadata: record {ZENODO_RECORD_ID}")
-    try:
-        meta_resp = requests.get(ZENODO_API_URL, timeout=30)
-        meta_resp.raise_for_status()
-        record = meta_resp.json()
-    except Exception as exc:
-        log.error(f"Failed to fetch Zenodo metadata: {exc}")
-        return None
-
-    # Find the zip file in the record's files list
-    files = record.get("files", [])
-    zip_entry = None
-    for f in files:
-        fname = f.get("key", "") or f.get("filename", "")
-        if fname.lower().endswith(".zip"):
-            zip_entry = f
-            break
-
-    if zip_entry is None:
-        log.error("No zip file found in Zenodo record. Files available:")
-        for f in files:
-            log.error(f"  {f.get('key') or f.get('filename', '?')}")
-        return None
-
-    # Zenodo API v2 uses 'links.self' for the download URL
-    download_url = (
-        zip_entry.get("links", {}).get("self")
-        or zip_entry.get("links", {}).get("download")
-    )
-    if not download_url:
-        # Construct manually
-        fname = zip_entry.get("key") or zip_entry.get("filename")
-        download_url = f"https://zenodo.org/record/{ZENODO_RECORD_ID}/files/{fname}"
-
-    log.info(f"Downloading Cresci-2017 zip from: {download_url}")
+    log.info(f"Downloading from: {url}")
     log.info("This may take a few minutes (~150 MB)...")
 
     try:
-        resp = requests.get(download_url, stream=True, timeout=120)
+        resp = requests.get(url, stream=True, timeout=300)
         resp.raise_for_status()
-
-        total = int(resp.headers.get("content-length", 0))
-        downloaded = 0
-        chunks = []
-
-        for chunk in resp.iter_content(chunk_size=1024 * 1024):  # 1 MB chunks
-            if chunk:
-                chunks.append(chunk)
-                downloaded += len(chunk)
-                if total:
-                    pct = downloaded / total * 100
-                    print(f"\r  Progress: {downloaded / 1e6:.1f} MB / {total / 1e6:.1f} MB ({pct:.0f}%)", end="", flush=True)
-
-        print()  # newline after progress
-        raw_zip = b"".join(chunks)
-        log.info(f"Downloaded {len(raw_zip) / 1e6:.1f} MB")
-
     except Exception as exc:
         log.error(f"Download failed: {exc}")
-        return None
+        return False
 
-    # Extract the zip
+    total = int(resp.headers.get("content-length", 0))
+    downloaded = 0
+    chunks = []
+
+    for chunk in resp.iter_content(chunk_size=1024 * 1024):
+        if chunk:
+            chunks.append(chunk)
+            downloaded += len(chunk)
+            if total:
+                pct = downloaded / total * 100
+                print(
+                    f"\r  {downloaded / 1e6:.1f} MB / {total / 1e6:.1f} MB ({pct:.0f}%)",
+                    end="", flush=True,
+                )
+
+    print()
+    raw_zip = b"".join(chunks)
+    log.info(f"Downloaded {len(raw_zip) / 1e6:.1f} MB")
+
     log.info(f"Extracting to {raw_dir} ...")
     raw_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         with zipfile.ZipFile(BytesIO(raw_zip)) as zf:
             zf.extractall(raw_dir)
-        log.info("Extraction complete.")
+        log.info("Outer zip extracted.")
     except zipfile.BadZipFile as exc:
         log.error(f"Bad zip file: {exc}")
-        return None
+        return False
 
-    return load_cresci_from_dir(raw_dir)
+    return True
+
+
+def extract_nested_zips(raw_dir: Path) -> None:
+    """Extract any *.csv.zip files found under raw_dir (in place)."""
+    nested_zips = list(raw_dir.rglob("*.csv.zip"))
+    if not nested_zips:
+        return
+    log.info(f"Found {len(nested_zips)} nested zip(s) — extracting...")
+    for nested in nested_zips:
+        try:
+            with zipfile.ZipFile(nested) as zf:
+                zf.extractall(nested.parent)
+            log.info(f"  Extracted: {nested.name}")
+            nested.unlink()
+        except zipfile.BadZipFile as exc:
+            log.warning(f"  Could not extract {nested.name}: {exc}")
 
 
 # ---------------------------------------------------------------------------
-# Parse the Cresci-2017 folder structure on disk
+# Parse the Cresci-2017 folder structure
 # ---------------------------------------------------------------------------
+
+def _find_cresci_root(search_root: Path) -> Optional[Path]:
+    """BFS search for directory containing Cresci-2017 category folders."""
+    known_folders = set(CRESCI_LABEL_MAP.keys())
+    queue = [search_root]
+    visited: set = set()
+    depth = 0
+    while queue and depth < 4:
+        next_queue = []
+        for path in queue:
+            if path in visited:
+                continue
+            visited.add(path)
+            if not path.is_dir():
+                continue
+            children = {p.name for p in path.iterdir() if p.is_dir()}
+            if children & known_folders:
+                return path
+            next_queue.extend(p for p in path.iterdir() if p.is_dir())
+        queue = next_queue
+        depth += 1
+    return None
+
 
 def load_cresci_from_dir(root: Path) -> Optional[Tuple[List[str], List[int]]]:
-    """
-    Walk a local directory and find all Cresci-2017 category folders.
-    Handles nested structures (zip may unpack into a subdirectory).
-    """
+    """Walk a local directory and load all Cresci-2017 category tweets."""
     import pandas as pd
 
-    # The zip may unpack into a subdirectory — find the actual root
     actual_root = _find_cresci_root(root)
     if actual_root is None:
         log.error(
@@ -350,7 +213,6 @@ def load_cresci_from_dir(root: Path) -> Optional[Tuple[List[str], List[int]]]:
         before = len(all_texts)
         for raw_text in df.iloc[:, 2].dropna():
             text = preprocess_text(str(raw_text))
-            # Skip very short or pure retweet headers
             if len(text) < 10:
                 continue
             all_texts.append(text)
@@ -366,57 +228,21 @@ def load_cresci_from_dir(root: Path) -> Optional[Tuple[List[str], List[int]]]:
     return all_texts, all_labels
 
 
-def _find_cresci_root(search_root: Path) -> Optional[Path]:
-    """
-    Recursively search for a directory that contains at least one of the
-    known Cresci-2017 category folders.
-    """
-    known_folders = set(CRESCI_LABEL_MAP.keys())
-
-    # BFS up to depth 4
-    queue = [search_root]
-    visited = set()
-    depth = 0
-    while queue and depth < 4:
-        next_queue = []
-        for path in queue:
-            if path in visited:
-                continue
-            visited.add(path)
-            if not path.is_dir():
-                continue
-            children = {p.name for p in path.iterdir() if p.is_dir()}
-            if children & known_folders:
-                return path
-            next_queue.extend(p for p in path.iterdir() if p.is_dir())
-        queue = next_queue
-        depth += 1
-
-    return None
-
-
 # ---------------------------------------------------------------------------
 # Save merged CSV
 # ---------------------------------------------------------------------------
 
 def save_merged_csv(texts: List[str], labels: List[int], output_path: Path) -> None:
-    try:
-        import pandas as pd
-    except ImportError:
-        import subprocess
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pandas"])
-        import pandas as pd
+    import pandas as pd
 
     df = pd.DataFrame({"text": texts, "label": labels})
 
-    # Deduplicate identical (text, label) pairs
     before = len(df)
     df = df.drop_duplicates(subset=["text"])
     after = len(df)
     if before != after:
         log.info(f"Removed {before - after} duplicate rows. {after} unique samples remain.")
 
-    # Shuffle for good measure
     df = df.sample(frac=1, random_state=42).reset_index(drop=True)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -433,56 +259,27 @@ def save_merged_csv(texts: List[str], labels: List[int], output_path: Path) -> N
 # Main
 # ---------------------------------------------------------------------------
 
-def parse_args():
+def main():
+    import argparse
+
     parser = argparse.ArgumentParser(
         description="Download and prepare Cresci-2017 for bot detection training."
     )
     parser.add_argument(
         "--output_dir",
         default=None,
-        help=(
-            "Root directory for datasets/ folder. "
-            "Defaults to two levels above this script (rf.v1.0.0/)."
-        ),
+        help="Root directory for datasets/ folder. Defaults to rf.v1.0.0/.",
     )
-    parser.add_argument(
-        "--method",
-        choices=["auto", "hf", "zenodo"],
-        default="auto",
-        help=(
-            "Download method. 'auto' tries HuggingFace first, then Zenodo. "
-            "'hf' = HuggingFace only. 'zenodo' = Zenodo direct download only."
-        ),
-    )
-    parser.add_argument(
-        "--local_dir",
-        default=None,
-        help=(
-            "Path to a locally extracted Cresci-2017 directory. "
-            "Skips all downloads and processes the local files directly."
-        ),
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable DEBUG-level logging.",
-    )
-    return parser.parse_args()
+    args = parser.parse_args()
 
+    if DIRECT_DOWNLOAD_URL == "DIRECT_DOWNLOAD_URL":
+        log.error(
+            "No download URL set. Open download_data.py and replace "
+            "DIRECT_DOWNLOAD_URL with your direct link."
+        )
+        sys.exit(1)
 
-def main():
-    args = parse_args()
-
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-
-    # Resolve output directory
-    if args.output_dir:
-        base_dir = Path(args.output_dir)
-    else:
-        # Default: rf.v1.0.0/ (two levels above this script)
-        base_dir = Path(__file__).resolve().parent.parent
-
+    base_dir = Path(args.output_dir) if args.output_dir else Path(__file__).resolve().parent.parent
     datasets_dir = base_dir / "datasets"
     raw_dir = datasets_dir / "cresci_2017_raw"
     output_csv = datasets_dir / "cresci_2017_merged.csv"
@@ -490,62 +287,31 @@ def main():
     log.info("=" * 60)
     log.info("Cresci-2017 Twitter Bot Detection — Data Downloader")
     log.info("=" * 60)
-    log.info(f"Base directory : {base_dir}")
-    log.info(f"Output CSV     : {output_csv}")
-    log.info(f"Method         : {args.method}")
+    log.info(f"Output CSV: {output_csv}")
 
-    texts: Optional[List[str]] = None
-    labels: Optional[List[int]] = None
+    if output_csv.exists():
+        log.info(f"Merged CSV already exists at {output_csv} — nothing to do.")
+        log.info("Delete it and re-run if you want to rebuild.")
+        return
 
-    # ── Path 0: local directory provided ────────────────────────────────────
-    if args.local_dir:
-        log.info(f"Processing local Cresci-2017 directory: {args.local_dir}")
-        result = load_cresci_from_dir(Path(args.local_dir))
-        if result:
-            texts, labels = result
-        else:
-            log.error("Failed to load data from local directory.")
-            sys.exit(1)
-
-    # ── Path 1: HuggingFace ──────────────────────────────────────────────────
-    elif args.method in ("auto", "hf"):
-        log.info("Attempting HuggingFace datasets download...")
-        result = try_hf_download()
-        if result:
-            texts, labels = result
-            log.info(f"HuggingFace download succeeded: {len(texts)} samples")
-        elif args.method == "hf":
-            log.error("HuggingFace download failed and no fallback requested.")
-            sys.exit(1)
-        else:
-            log.warning("HuggingFace download failed. Falling back to Zenodo...")
-
-    # ── Path 2: Zenodo (fallback or explicit) ────────────────────────────────
-    if texts is None and args.method in ("auto", "zenodo"):
-        log.info("Attempting Zenodo direct download...")
-        result = try_zenodo_download(raw_dir)
-        if result:
-            texts, labels = result
-            log.info(f"Zenodo download succeeded: {len(texts)} samples")
-        else:
-            log.error(
-                "Zenodo download also failed.\n"
-                "You can manually download Cresci-2017 from:\n"
-                "  https://zenodo.org/record/1482079\n"
-                "Then run: python download_data.py --local_dir /path/to/extracted/cresci"
-            )
-            sys.exit(1)
-
-    if texts is None or labels is None:
-        log.error("No data was loaded. Exiting.")
+    if raw_dir.exists():
+        log.info(f"Raw data already extracted at {raw_dir} — skipping download.")
+    elif not download_zip(DIRECT_DOWNLOAD_URL, raw_dir):
         sys.exit(1)
 
-    # ── Save ─────────────────────────────────────────────────────────────────
+    extract_nested_zips(raw_dir)
+
+    result = load_cresci_from_dir(raw_dir)
+    if result is None:
+        log.error("Failed to parse dataset from extracted files.")
+        sys.exit(1)
+
+    texts, labels = result
     save_merged_csv(texts, labels, output_csv)
 
     log.info("")
     log.info("Done! To train the model, run:")
-    log.info(f"  python training-pipeline/train_ensemble.py --data_path {output_csv}")
+    log.info(f"  python train.py --config production --data_path {output_csv}")
     log.info("=" * 60)
 
 
