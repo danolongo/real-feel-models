@@ -278,7 +278,14 @@ def main():
     log.info("=" * 60)
     log.info(f"Output CSV: {output_csv}")
 
-    if not download_zip(DIRECT_DOWNLOAD_URL, raw_dir):
+    if output_csv.exists():
+        log.info(f"Merged CSV already exists at {output_csv} — nothing to do.")
+        log.info("Delete it and re-run if you want to rebuild.")
+        return
+
+    if raw_dir.exists():
+        log.info(f"Raw data already extracted at {raw_dir} — skipping download.")
+    elif not download_zip(DIRECT_DOWNLOAD_URL, raw_dir):
         sys.exit(1)
 
     result = load_cresci_from_dir(raw_dir)
