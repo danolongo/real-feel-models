@@ -227,12 +227,21 @@ def load_cresci_from_dir(root: Path) -> Optional[Tuple[List[str], List[int]]]:
             log.warning(f"  No tweets.csv in {folder_path}, skipping.")
             continue
 
-        # Cresci-2017 tweets.csv has no header; tweet text is column index 2.
-        # Files use Latin-1 encoding (legacy Twitter export, ~2010-2013).
+        # Some Cresci-2017 files have a named header (id, text, source, ...),
+        # others are headerless with tweet text at column index 2.
+        # Detect by peeking at the first row.
         try:
-            df = pd.read_csv(
+            peek = pd.read_csv(
                 tweets_csv,
                 header=None,
+                encoding="latin-1",
+                nrows=1,
+                on_bad_lines="skip",
+            )
+            has_header = "text" in peek.iloc[0].values
+            df = pd.read_csv(
+                tweets_csv,
+                header=0 if has_header else None,
                 encoding="latin-1",
                 low_memory=False,
                 on_bad_lines="skip",
@@ -241,15 +250,21 @@ def load_cresci_from_dir(root: Path) -> Optional[Tuple[List[str], List[int]]]:
             log.warning(f"  Could not read {tweets_csv}: {exc}")
             continue
 
-        if df.shape[1] < 3:
+        if df.shape[1] < 2:
             log.warning(f"  Unexpected column count ({df.shape[1]}) in {tweets_csv}, skipping.")
             continue
 
-        text_col = _detect_text_column(df)
-        log.debug(f"  {folder_name}: using column {text_col} as tweet text")
+        if has_header:
+            if "text" not in df.columns:
+                log.warning(f"  No 'text' column in {tweets_csv}, skipping.")
+                continue
+            text_series = df["text"]
+        else:
+            text_col = _detect_text_column(df)
+            text_series = df.iloc[:, text_col]
 
         before = len(all_texts)
-        for raw_text in df.iloc[:, text_col].dropna():
+        for raw_text in text_series.dropna():
             text = preprocess_text(str(raw_text))
             if len(text) < 10:
                 continue
