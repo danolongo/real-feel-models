@@ -29,7 +29,7 @@ uv python install "$PYTHON_VERSION"
 uv sync
 
 echo "=== [5/6] Download dataset ==="
-uv run python -m rf.v1.0.0.data-pipeline.download_data
+uv run python rf.v1.0.0/data_pipeline/download_data.py
 echo "Dataset ready at rf.v1.0.0/datasets/cresci_2017_merged.csv"
 
 echo "=== [6/6] Verify GPU ==="
@@ -37,7 +37,7 @@ uv run python -c "import torch; print('CUDA available:', torch.cuda.is_available
 
 echo ""
 echo "Setup complete. Start training with:"
-echo "  nohup uv run python -m rf.v1.0.0.training-pipeline.train_ensemble \\"
+echo "  nohup uv run python train.py \\"
 echo "    --config production \\"
 echo "    --data_path rf.v1.0.0/datasets/cresci_2017_merged.csv \\"
 echo "    --output_dir ./trained_models \\"

@@ -21,10 +21,10 @@ from sklearn.metrics import (
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from ..setup.config import ExperimentConfig
-from ..setup.model import CLSMaxPoolEnsemble
-from ..setup.loss import AdvancedLossFunction, EnsembleLoss
-from ..setup.optimizer import OptimizationManager
+from setup.config import ExperimentConfig
+from setup.model import CLSMaxPoolEnsemble
+from setup.loss import AdvancedLossFunction, EnsembleLoss
+from setup.optimizer import OptimizationManager
 
 
 class EnsembleTrainer:
@@ -67,7 +67,7 @@ class EnsembleTrainer:
         }
 
         self.best_model_state = None
-        self.best_val_f1 = 0.0
+        self.best_val_f1 = -1.0  # ensures first epoch always saves
         self.training_start_time = None
 
         # AMP scaler — only active on CUDA
@@ -250,7 +250,7 @@ class EnsembleTrainer:
         """Save model if it's the best so far"""
         if val_f1 > self.best_val_f1:
             self.best_val_f1 = val_f1
-            self.best_model_state = self.model.state_dict().copy()
+            self.best_model_state = {k: v.clone() for k, v in self.model.state_dict().items()}
             print(f"★ New best ensemble model saved (F1: {val_f1:.4f})")
             return True
         return False
@@ -395,7 +395,8 @@ class EnsembleTrainer:
             if lr_history:
                 # Sample learning rates at epoch boundaries
                 steps_per_epoch = len(self.train_loader)
-                epoch_lrs = [lr_history[i * steps_per_epoch] for i in range(len(self.history['train_loss']))]
+                epoch_lrs = [lr_history[i * steps_per_epoch] for i in range(len(self.history['train_loss']))
+                             if i * steps_per_epoch < len(lr_history)]
                 axes[1, 2].plot(epoch_lrs, label='Learning Rate', color='red')
                 axes[1, 2].set_title('Learning Rate Schedule')
                 axes[1, 2].set_xlabel('Epoch')

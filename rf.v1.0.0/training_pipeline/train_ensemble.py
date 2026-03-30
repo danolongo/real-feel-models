@@ -19,12 +19,12 @@ import os
 import torch
 from typing import Dict, Any, Optional
 
-# Add the model directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+# Ensure rf.v1.0.0/ is on the path for absolute imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from ..setup.config import get_default_config, get_fast_config, get_production_config
-from ..setup.model import create_ensemble_model
-from .trainer import create_ensemble_trainer
+from setup.config import get_default_config, get_fast_config, get_production_config
+from setup.model import create_ensemble_model
+from training_pipeline.trainer import create_ensemble_trainer
 from torch.utils.data import Dataset, DataLoader, random_split
 
 # Set up logging

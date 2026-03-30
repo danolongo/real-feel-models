@@ -38,7 +38,8 @@ class MultiHeadAttention(nn.Module):
         scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.head_dim)
 
         if mask is not None:
-            scores = scores.masked_fill(mask == 0, -1e9)
+            # mask is additive: 0.0 for real tokens, -10000.0 for padding
+            scores = scores + mask
 
         attention_weights = F.softmax(scores, dim=-1)
         attention_weights = self.dropout(attention_weights)

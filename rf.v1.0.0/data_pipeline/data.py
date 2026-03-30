@@ -18,7 +18,7 @@ import logging
 from typing import Dict, List, Tuple, Optional, Union
 import re
 
-from ..setup.config import DataConfig
+from setup.config import DataConfig
 
 logger = logging.getLogger(__name__)
 
