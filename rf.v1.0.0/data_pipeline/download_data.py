@@ -62,23 +62,43 @@ def preprocess_text(text: str) -> str:
     if not text or str(text).strip() in ("nan", "None", ""):
         return "[EMPTY]"
     text = str(text).strip()
-
-    # Drop rows that are HTML source strings (tweet client field leaked into text column)
-    # e.g. <a href="..." rel="nofollow">Twitter Web Client</a>
-    stripped = _HTML_TAG_RE.sub("", text).strip()
-    if not stripped:
-        return "[EMPTY]"
-    # If the original text was >50% HTML tags, it's a source field — discard it
-    if len(stripped) < len(text) * 0.5:
-        return "[EMPTY]"
-
-    text = stripped
-    # Unescape HTML entities (e.g. &amp; &lt; &#39;)
+    # Strip any HTML tags, keeping inner text (e.g. <b>word</b> → word)
+    text = _HTML_TAG_RE.sub(" ", text).strip()
+    # Unescape HTML entities (e.g. &amp; → & , &#39; → ')
     text = html.unescape(text)
     text = _URL_RE.sub("http://url.removed", text)
     text = _MENTION_RE.sub("@user", text)
     text = " ".join(text.split())
     return text or "[EMPTY]"
+
+
+_HTML_SOURCE_RE = re.compile(r'<a\s+href=', re.IGNORECASE)
+_DATETIME_RE = re.compile(r'^\w{3}\s+\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}')
+_NUMERIC_RE = re.compile(r'^\d+$')
+
+
+def _detect_text_column(df) -> int:
+    """
+    Score columns 2-4 and return the index of the one most likely to contain
+    tweet text (not a datetime, numeric ID, or HTML source field).
+    """
+    sample = df.head(200)
+    best_col, best_score = 2, -1.0
+
+    for col in range(2, min(df.shape[1], 5)):
+        values = sample.iloc[:, col].dropna().astype(str)
+        if len(values) == 0:
+            continue
+        html_source = values.str.contains(_HTML_SOURCE_RE).mean()
+        numeric = values.str.match(_NUMERIC_RE).mean()
+        is_datetime = values.str.match(_DATETIME_RE).mean()
+        avg_len = values.str.len().mean()
+        # High penalties for source HTML / IDs / datetimes; reward for length
+        score = avg_len - html_source * 500 - numeric * 200 - is_datetime * 200
+        if score > best_score:
+            best_score, best_col = score, col
+
+    return best_col
 
 
 # ---------------------------------------------------------------------------
@@ -225,8 +245,11 @@ def load_cresci_from_dir(root: Path) -> Optional[Tuple[List[str], List[int]]]:
             log.warning(f"  Unexpected column count ({df.shape[1]}) in {tweets_csv}, skipping.")
             continue
 
+        text_col = _detect_text_column(df)
+        log.debug(f"  {folder_name}: using column {text_col} as tweet text")
+
         before = len(all_texts)
-        for raw_text in df.iloc[:, 2].dropna():
+        for raw_text in df.iloc[:, text_col].dropna():
             text = preprocess_text(str(raw_text))
             if len(text) < 10:
                 continue
