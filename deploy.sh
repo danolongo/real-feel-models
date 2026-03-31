@@ -63,8 +63,8 @@ uv sync
 echo "Installing PyTorch for CUDA ${CUDA_VERSION}..."
 uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 
-# Verify CUDA is visible to PyTorch
-python3 -c "
+# Verify CUDA is visible to PyTorch (must use uv run so it sees the venv)
+uv run python3 -c "
 import torch, sys
 if not torch.cuda.is_available():
     print('ERROR: torch.cuda.is_available() is False after installing cu128 wheel.')
@@ -90,7 +90,7 @@ print('VRAM           :', round(torch.cuda.get_device_properties(0).total_memory
 
 echo ""
 echo "Setup complete. Start training with:"
-echo "  nohup python3 train.py \\"
+echo "  nohup uv run python3 train.py \\"
 echo "    --config production \\"
 echo "    --data_path rf.v1.0.0/datasets/cresci_2017_merged.csv \\"
 echo "    --output_dir ./trained_models \\"
