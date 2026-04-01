@@ -1,0 +1,39 @@
+Test Results:
+============================================================
+Ensemble Performance:
+  Test Loss:      1.6560
+  Test Accuracy:  0.9122
+  Test Precision: 0.7748
+  Test Recall:    0.7093
+  Test F1:        0.7406
+  Test ROC AUC:   0.9058
+
+Individual Model Analysis:
+  Primary (CLS) Accuracy:     0.8944
+  Backup (MaxPool) Accuracy:  0.9064
+  Model Agreement Rate:       0.9155
+  Ensemble Improvement:       +0.0059
+
+Detailed Classification Report:
+------------------------------------------------------------
+              precision    recall  f1-score   support
+
+       Human     0.9387    0.9558    0.9472    253319
+         Bot     0.7748    0.7093    0.7406     54349
+
+    accuracy                         0.9122    307668
+   macro avg     0.8568    0.8325    0.8439    307668
+weighted avg     0.9098    0.9122    0.9107    307668
+
+2026-04-01 04:10:28,326 - INFO - ✅ Testing completed
+2026-04-01 04:10:28,326 - INFO - ================================================================================
+2026-04-01 04:10:28,326 - INFO - 🎉 TRAINING COMPLETED SUCCESSFULLY!
+2026-04-01 04:10:28,326 - INFO - ================================================================================
+2026-04-01 04:10:28,326 - INFO - Final Performance:
+2026-04-01 04:10:28,326 - INFO -   ✅ Ensemble Accuracy: 0.9122
+2026-04-01 04:10:28,326 - INFO -   ✅ Primary (CLS) Accuracy: 0.8944
+2026-04-01 04:10:28,326 - INFO -   ✅ Backup (MaxPool) Accuracy: 0.9064
+2026-04-01 04:10:28,326 - INFO -   ✅ F1 Score: 0.7406
+2026-04-01 04:10:28,326 - INFO -   ✅ ROC AUC: 0.9058
+2026-04-01 04:10:28,326 - INFO -   🚀 Ensemble Improvement: +0.0059
+2026-04-01 04:10:28,790 - INFO - 💾 Model saved to: trained_models/cls_maxpool_ensemble_20260401_041028_best.pt

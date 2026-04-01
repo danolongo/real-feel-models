@@ -356,7 +356,11 @@ def save_training_results(config, metrics: Dict[str, Any], model_path: str, outp
                 'backup_weight': config.ensemble.backup_weight
             }
         },
-        'final_metrics': metrics,
+        'final_metrics': {
+            k: float(v) if hasattr(v, 'item') or isinstance(v, (int, float)) else None
+            for k, v in metrics.items()
+            if not isinstance(v, (list, np.ndarray))
+        },
         'model_path': model_path,
         'training_timestamp': datetime.now().isoformat(),
         'device': str(config.device)
