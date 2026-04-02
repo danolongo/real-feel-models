@@ -21,7 +21,7 @@ uv sync
 
 ## Data
 
-Downloads the [Cresci-2017](https://zenodo.org/record/1482079) bot-detection dataset (~150 MB) and outputs a single merged CSV:
+Downloads the [Cresci-2017](https://botometer.osome.iu.edu/bot-repository/datasets.html) bot-detection dataset (~150 MB) and outputs a single merged CSV:
 
 ```bash
 uv run python rf.v1.0.0/data_pipeline/download_data.py
